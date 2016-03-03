@@ -8,6 +8,7 @@ var path = require("path");
 var debug = require("debug")("xiao")
 var util = require("util");
 var url = require('url')
+var Transform = require('stream').Transform;
 
 var AcdFs = require("./AcdFs");
 var FsFs = require("./FsFs");
@@ -114,8 +115,48 @@ var copyFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb, qcb) {
 	
 }
 
+
+var ActivityMonitor = function() {
+	this.activities = [];
+}
+ActivityMonitor.prototype.start = function(activity) {
+	this.activities.push(activity);
+	console.log("added %d", this.activities.length-1);
+	this.display();
+	return activity;
+}
+ActivityMonitor.prototype.end = function(activityId) {
+	var i = 0;
+	for(i = 0 ; i < this.activities.length && this.activities[i] !== activityId ; i++);
+	this.activities.splice(i, 1);
+	console.log("removed %d", i);
+	this.display();
+}
+ActivityMonitor.prototype.display = function() {
+	this.activities.forEach(function(activity) {
+		console.log("%s %d", activity.description, activity.progress);
+	})
+}
+var activityMonitor = new ActivityMonitor();
+
+util.inherits(StreamCounter, Transform);
+
+function StreamCounter(options) {
+	Transform.call(this, options);
+	this.bytes = 0;
+}
+
+StreamCounter.prototype._transform = function (data, encoding, callback) {
+	this.bytes += data.length;
+	this.emit('progress', this.bytes);
+	callback(null, data);
+};
+
+
 var copyRegularFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb) {
 	debug("copyRegularFile %j %s %j", srcHandle, name, dstHandle);
+	var activity = { description: "copy " + name, progress: 0 };
+	var activityId = activityMonitor.start( activity );
 	srcFs.getSize(srcHandle, function(err, size) {	
 		if(err) return cb(err);
 		srcFs.readFile(srcHandle, function(err, stream) {
@@ -124,10 +165,16 @@ var copyRegularFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb) {
 			stream.on("error", function(err) {
 				done(err);
 			});
-			dstFs.createFile(dstHandle, name, stream, size, function(err) {
+			var streamCounter = new StreamCounter();
+			streamCounter.on("progress", function(bytes) {
+				activity.progress = bytes*100/size;
+				activityMonitor.display();
+			});
+			dstFs.createFile(dstHandle, name, stream.pipe(streamCounter), size, function(err) {
 				done(err);
 			});
 			function done(err) {
+				activityMonitor.end(activityId);
 				if (!cbCalled) {
 					cb(err);
 					cbCalled = true;
@@ -357,16 +404,18 @@ LazyCursor.prototype.get = function(cb) {
 }
 
 var resolveUrl = function(tUrl, options, cb) {
-	var parsedUrl = url.parse(tUrl)
-	var tFsMod, path;
-	switch(parsedUrl.protocol) {
-		case "acd:":
+	var protocol = tUrl.substr(0, tUrl.indexOf(":"));
+	var path = tUrl.substr(tUrl.indexOf(":") + 1);
+	var tFsMod;
+	switch(protocol) {
+		case "acd":
 			tFsMod = AcdFs;
-			path = parsedUrl.pathname;
+		break;
+		case "":
+			tFsMod = FsFs;
 		break;
 		default:
-			tFsMod = FsFs;
-			path = (parsedUrl.hostname || "") +  (parsedUrl.pathname || "");
+			process.nextTick( cb.bind(null, new Error("Unknown protocol: " + protocol) ) );
 		break;
 
 	}
