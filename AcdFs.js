@@ -90,7 +90,7 @@ AcdFs.prototype.getSize = function(handle, cb) {
 }
 
 AcdFs.prototype.getMD5 = function(handle, cb) {
-        debug("AcdFs.getMD5 %s", handle);
+        debug("AcdFs.getMD5 %j", handle);
         var self = this;
 	process.nextTick( function() {
 		cb(null, handle.contentProperties.md5);
@@ -98,18 +98,18 @@ AcdFs.prototype.getMD5 = function(handle, cb) {
 }
 
 AcdFs.prototype.unlink = function(handle, cb) {
-	debug("AcdFs.unlink %s", handle);
+	debug("AcdFs.unlink %j", handle);
 	var self = this;
-	self.session.add_to_trash(hanlde.node.id, function(err, result) {
+	self.session.add_to_trash(handle.node.id, function(err, result) {
 		if(err) return cb(err);
 		return cb(null);
 	});
 }
 
 AcdFs.prototype.rmdir = function(handle, cb) {
-	debug("AcdFs.rmdir %s", handle);
+	debug("AcdFs.rmdir %j", handle);
 	var self = this;
-	self.session.add_to_trash(hanlde.node.id, function(err, result) {
+	self.session.add_to_trash(handle.node.id, function(err, result) {
 		if(err) return cb(err);
 		return cb(null);
 	});
