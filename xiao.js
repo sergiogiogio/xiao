@@ -11,7 +11,7 @@ var url = require('url')
 
 var AcdFs = require("./AcdFs");
 var FsFs = require("./FsFs");
-var Join = require("./Join2");
+var Join = require("./Join");
 
 var Joiner = function(count) {
 	this.count = count;
@@ -356,97 +356,84 @@ LazyCursor.prototype.get = function(cb) {
 	}
 }
 
-var fromFs = new FsFs();
-
-
-var toFs = new FsFs();
-
-var makeFsPath = function(turl) {
-	var parsedUrl = url.parse(turl)
-	console.log(parsedUrl.protocol)
+var resolveUrl = function(tUrl, options, cb) {
+	var parsedUrl = url.parse(tUrl)
+	var tFsMod, path;
 	switch(parsedUrl.protocol) {
 		case "acd:":
-			console.log("create acd");
-			return { fs: new AcdFs( ), path: parsedUrl.pathname };
+			tFsMod = AcdFs;
+			path = parsedUrl.pathname;
 		break;
 		default:
-			return { fs: new FsFs(), path: (parsedUrl.hostname || "") +  (parsedUrl.pathname || "") };
+			tFsMod = FsFs;
+			path = (parsedUrl.hostname || "") +  (parsedUrl.pathname || "");
 		break;
 
 	}
+	tFsMod.createFs(options, function(err, tFs) {
+		if(err) return cb(err);
+		tFs.init(path, function(err, file){
+			if(err) return cb(err);
+			cb(null, { fs: tFs, file: file });
+		});
+	})
 };
-//var archiveCursor = new FsCursor(), archiveLocation = "archive";
-//var archiveCursor = new AcdCursor(session), archiveLocation = "/SyncTests2";
 
 (function(cb) {
 
 var argvIt = 2;
 var command = process.argv[argvIt++];
-var option, fsPath, fromFsPath, toFsPath;
+var options = {};
+var tasks = [];
+for( ; argvIt < process.argv.length ; argvIt++) {
+	if(process.argv[argvIt].startsWith("--option-")) options[process.argv[argvIt].substr("--option-".length)] = process.argv[argvIt++];
+	else if(!process.argv[argvIt].startsWith("-")) {
+		tasks.push( resolveUrl.bind(null, process.argv[argvIt], options) )
+		options = {};
+	}
+	else return cb( new Error("unrecognized option '" + process.argv[argvIt] + "'") )
+}
 
-switch(command) {
-	case "ls":
-		for( ; argvIt < argv.length ; argIt++) {
-			if(process.argv[argvIt] == "--option") option = process.argv[argvIt++];
-			else if(!fsPath) fsPath = makeFsPath(process.argv[argvIt], option);
-			else return cb( new Error("unrecognized option '" + process.argv[argvIt] + "'") )
-		}
-		var fsPath = makeFsPath(process.argv[3]);
-		async.parallel({
-			from: fsPath.fs.init.bind(fsPath.fs, fsPath.path)
-		}, function(err, results) {
-			console.log("%j", results.from);
-			if(err) return cb(err);
-			fsPath.fs.listFiles(results.from.handle, function(err, files) {
-				if(err) return cb(err);
-				files.forEach( function(file) {
-					console.log(file.name)
+async.parallel(tasks, function(err, results){
+	if(err) return cb(err);
+
+	switch(command) {
+		case "ls":
+			results.forEach(function(item) {
+				item.fs.listFiles(item.file.handle, function(err, files) {
+					if(err) return cb(err);
+					files.forEach( function(file) {
+						console.log(file.name)
+					})
 				})
 			})
-		})
-	break;
-	case "cp":
-		for( ; argvIt < argv.length ; argIt++) {
-			if(process.argv[argvIt] == "--option") option = process.argv[argvIt++];
-			else if(!fromFsPath) fromFsPath = makeFsPath(process.argv[argvIt], option);
-			else if(!toFsPath) toFsPath = makeFsPath(process.argv[argvIt], option);
-			else return cb( new Error("unrecognized option '" + process.argv[argvIt] + "'") )
-		}
-		async.parallel({
-			from: fromFs.init.bind(fromFs, process.argv[3]),
-			to: toFs.init.bind(toFs, process.argv[4]),
-		}, function(err, results) {
-			if(err) return cb(err);
-			copyFile(fromFs, results.from.handle, results.from.name, toFs, results.to.handle, cb)
-		})
-	break;
-	case "rm": 
-		for( ; argvIt < argv.length ; argIt++) {
-			if(process.argv[argvIt] == "--option") option = process.argv[argvIt++];
-			else if(!fsPath) fsPath = makeFsPath(process.argv[argvIt], option);
-			else return cb( new Error("unrecognized option '" + process.argv[argvIt] + "'") )
-		}
-		async.parallel({
-			from: fromFs.init.bind(fromFs, process.argv[3])
-		}, function(err, results) {
-			if(err) return cb(err);
-			deleteFile(fromFs, results.from.handle, cb)
-		})
-	break;
-	case "rsync": 
-		async.parallel({
-			from: fromFs.init.bind(fromFs, process.argv[3]),
-			to: toFs.init.bind(toFs, process.argv[4]),
-		}, function(err, results) {
-			if(err) return cb(err);
-			rsyncFile(fromFs, results.from.handle, results.from.name, toFs, results.to.handle, cb)
-		})
-	break;
-	default: 
-		process.nextTick( cb.bind(null, new Error("unrecognized command: " + command) ))
+		break;
+		case "cp":
+			var dest = results.pop();
+			results.forEach( function(item) {
+				copyFile(item.fs, item.file.handle, item.file.name, dest.fs, dest.file.handle, cb)
+			})
+		break;
+		case "rm": 
+			results.forEach( function(item) {
+				deleteFile(item.fs, item.file.handle, cb)
+			})
+		break;
+		case "rsync": 
+			var dest = results.pop();
+			results.forEach( function(item) {
+				rsyncFile(item.fs, item.file.handle, item.file.name, dest.fs, dest.file.handle, cb)
+			})
+		break;
+		default: 
+			process.nextTick( cb.bind(null, new Error("unrecognized command: " + command) ))
 
-	break;
-}
+		break;
+	}
+
+
+})
+
 
 })(function(err) {
 	console.log("result: %s", err || "SUCCESS");

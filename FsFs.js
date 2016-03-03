@@ -142,4 +142,13 @@ FsFs.prototype.init = function(str, cb) {
 	});
 }
 
+FsFs.createFs = function(options, cb) {
+	debug("FsFs.createFs");
+	var ret = new FsFs();
+	process.nextTick(function() {
+		cb(null, ret);
+	})
+}
+
+
 module.exports = FsFs;

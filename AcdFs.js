@@ -1,9 +1,7 @@
 'use strict'
 
 
-var Api = require("./api");
-
-var token = require("./token.json");
+var Api = require("acdc");
 
 var fs = require("fs");
 var async = require("async");
@@ -13,7 +11,6 @@ var util = require("util");
 
 
 var AcdFs = function(options) {
-	this.tokenFile = (options && options.tokenFile) || "acd.token";
 }
 
 var AcdHandle = function(node) {
@@ -139,27 +136,32 @@ AcdFs.prototype.init = function(str, cb) {
 	});
 }
 
-AcdFs.prototype._initialize = function(cb) {
+AcdFs.prototype._initialize = function(options, cb) {
 	debug("AcdFs._initialize");
 	var self = this;
+	self.tokenFile = (options && options.tokenFile) || "acd.token";
 
-	var initSession = function(token) {
-	}
-	
-	if(self.tokenFile) {
-		fs.readFile(self.tokenFile, function(err, data) {
-			if(err) return cb(err);
-			var token = JSON.parse(data);
-			self.session = new Api.Session(token);
-			cb(null)
-		})
-	}
+	fs.readFile(self.tokenFile, function(err, data) {
+		if(err && err.code !== "ENOENT") return cb(err);
+		if(err && err.code === "ENOENT") debug("Could not read token file: error %s", err)
+		var token = !err && JSON.parse(data);
+		self.session = new Api.Session(token);
+		self.session.on("newToken", function(token) {
+			fs.writeFile(self.tokenFile, JSON.stringify(token), function(err) {
+				if(err) return debug("Could not write token file: error %s", err);
+				debug("Token file written successfully");
+			});
+		});
+		cb(null);
+	});
 }
 
-var makeFs = function(option, cb) {
-
-	var tokenFile = option;
-
+AcdFs.createFs = function(options, cb) {
+	debug("AcdFs.createFs");
+	var ret = new AcdFs();
+	ret._initialize(options, function(err) {
+		cb(err, ret);
+	});
 }
 
 module.exports = AcdFs;
