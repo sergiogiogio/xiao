@@ -1,13 +1,13 @@
-'use strict'
+'use strict';
 
 var assert = require('assert');
 
 var fs = require("fs");
 var async = require("async");
 var path = require("path");
-var debug = require("debug")("xiao")
+var debug = require("debug")("xiao");
 var util = require("util");
-var url = require('url')
+var url = require('url');
 var Transform = require('stream').Transform;
 
 var AcdFs = require("./AcdFs");
@@ -58,7 +58,7 @@ var copyDirectory = function(srcFs, srcHandle, dstFs, dstHandle, cb, qcb) {
 		var join = new Joiner(files.length+1);
 		var loop = function(i, qcb) {
 			if(i >= files.length) return process.nextTick( function() { qcb(null); join.fun(null); } );
-			copyFile(srcFs, files[i].handle, files[i].name, dstFs, dstHandle, join.fun.bind(join), qcb);
+			copyFile(srcFs, files[i].handle, files[i].name, dstFs, dstHandle, files[i].name, join.fun.bind(join), qcb);
 			queue.push( loop.bind(null, i+1) );
 		};
 		queue.push( loop.bind(null, 0) );
@@ -67,10 +67,16 @@ var copyDirectory = function(srcFs, srcHandle, dstFs, dstHandle, cb, qcb) {
 	});
 }
 
-// copy a file into a location, File can be regular file or directory
-var copyFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb, qcb) {
+
+// copy a file into a directory, file can be regular file or directory
+// srcHandle: handle of the file
+// name: name of the source file
+// dstHandle: handle of the directory
+// dstName: name of the dest file 
+var copyFile = function(srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb) {
+	debug("copyFile %j %s %j %s", srcHandle, name, dstHandle, dstName);
 	var dstExistsIsDirectory = function(cb) {
-		dstFs.exists(dstHandle, name, function(err, existsHandle) {
+		dstFs.exists(dstHandle, dstName, function(err, existsHandle) {
 			if(err) return cb(err);
 			if(!existsHandle.exists) return cb(null, { exists: false } );
 			dstFs.isDirectory(existsHandle.handle, function(err, isDirectory) {
@@ -86,28 +92,26 @@ var copyFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb, qcb) {
 		if(err) return cb(err);
 		if(results.srcIsDirectory) {
 			if(!results.dstExistsIsDirectory.exists) {
-				dstFs.createDirectory(dstHandle, name, function(err, handle) {
+				dstFs.createDirectory(dstHandle, dstName, function(err, handle) {
 					if(err) return cb(err);
 					copyDirectory(srcFs, srcHandle, dstFs, handle, cb, qcb);
 				});
 			} else if(results.dstExistsIsDirectory.isDirectory) {
 				copyDirectory(srcFs, srcHandle, dstFs, results.dstExistsIsDirectory.handle, cb, qcb);
 			} else {
-				cb(new Error(name + " is directory in src but regular file in destination"));
+				cb(new Error("cannot overwrite non-directory '" + dstName + "' with directory '" + name + "'"));
 				if(qcb) qcb(null);
 			}
 		} else {
 			if(!results.dstExistsIsDirectory.exists) {
-				copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, cb);
-				if(qcb) qcb(null);
+				copyRegularFile(srcFs, srcHandle, dstName, dstFs, dstHandle, dstName, cb, qcb);
 			} else if(!results.dstExistsIsDirectory.isDirectory) {
 				dstFs.unlink(results.dstExistsIsDirectory.handle, function(err) {
 					if(err) return cb(err);
-					copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, cb);
-					if(qcb) qcb(null);
+					copyRegularFile(srcFs, srcHandle, dstName, dstFs, dstHandle, dstName, cb, qcb);
 				});
 			} else {
-				cb(new Error(name + " is regular file in src but directory in destination"));
+				cb(new Error("cannot overwrite directory '" + dstName + "' with non-directory '" + name + "'"));
 				if(qcb) qcb(null);
 			}
 		}
@@ -118,6 +122,7 @@ var copyFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb, qcb) {
 
 var ActivityMonitor = function() {
 	this.activities = [];
+	this.linesWritten = 0;
 }
 ActivityMonitor.prototype.start = function(activity) {
 	this.activities.push(activity);
@@ -132,10 +137,15 @@ ActivityMonitor.prototype.end = function(activityId) {
 	console.log("removed %d", i);
 	this.display();
 }
+ActivityMonitor.prototype.notifyProgress = function(activityId) {
+	this.display();
+}
 ActivityMonitor.prototype.display = function() {
+	//if(this.linesWritten > 0) process.stdout.write("\u001b["+(this.linesWritten)+"A");
 	this.activities.forEach(function(activity) {
 		console.log("%s %d", activity.description, activity.progress);
 	})
+	this.linesWritten = this.activities.length;
 }
 var activityMonitor = new ActivityMonitor();
 
@@ -152,34 +162,51 @@ StreamCounter.prototype._transform = function (data, encoding, callback) {
 	callback(null, data);
 };
 
-
-var copyRegularFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb) {
-	debug("copyRegularFile %j %s %j", srcHandle, name, dstHandle);
-	var activity = { description: "copy " + name, progress: 0 };
-	var activityId = activityMonitor.start( activity );
+// copy a regular file into a directory (assumption: file does not already exist)
+// srcHandle: handle of the file
+// name: name of the file
+// dstHandle: handle of the directory
+var copyRegularFile = function(srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb) {
+	debug("copyRegularFile %j %s %j %s", srcHandle, name, dstHandle, dstName);
 	srcFs.getSize(srcHandle, function(err, size) {	
-		if(err) return cb(err);
+		if(err) { if(qcb) qcb(null); return cb(err); }
 		srcFs.readFile(srcHandle, function(err, stream) {
-			if(err) return cb(err);
-			var cbCalled = false;
-			stream.on("error", function(err) {
-				done(err);
-			});
-			var streamCounter = new StreamCounter();
-			streamCounter.on("progress", function(bytes) {
-				activity.progress = bytes*100/size;
-				activityMonitor.display();
-			});
-			dstFs.createFile(dstHandle, name, stream.pipe(streamCounter), size, function(err) {
-				done(err);
-			});
-			function done(err) {
-				activityMonitor.end(activityId);
-				if (!cbCalled) {
-					cb(err);
-					cbCalled = true;
+			if(err) { if(qcb) qcb(null); return cb(err); }
+
+			
+			var doCopy = function(qcb) {
+				var activity = { description: "copy " + name, progress: 0 };
+				var activityId = activityMonitor.start( activity );
+				var cbCalled = false;
+				stream.on("error", function(err) {
+					done(err);
+				});
+				var streamCounter = new StreamCounter();
+				streamCounter.on("progress", function(bytes) {
+					activity.progress = bytes*100/size;
+					activityMonitor.notifyProgress(activityId);
+				});
+				dstFs.createFile(dstHandle, dstName, stream.pipe(streamCounter), size, function(err) {
+					done(err);
+				});
+				function done(err) {
+					if (!cbCalled) {
+						if(err) {
+							streamCounter.unpipe();
+							streamCounter.end();
+							stream.unpipe(); // else the stream continues despite of the error?
+							stream.end();
+						}
+						activityMonitor.end(activityId);
+						qcb(null);
+						cb(err);
+						cbCalled = true;
+					}
 				}
 			}
+
+			queue.push( doCopy );
+			if(qcb) qcb(null);
 		});
 	});
 }
@@ -193,6 +220,13 @@ var rsyncDirectory = function(srcFs, srcHandle, dstFs, dstHandle, cb, qcb) {
 		dst: dstFs.listFiles.bind(dstFs, dstHandle)
 	}, function(err, files) {
 		if(err) return cb(err);
+		var sortFiles = function(a, b){
+			if(a.name < b.name) return -1;
+			if(a.name > b.name) return 1;
+			return 0;
+		};
+		files.src.sort(sortFiles);
+		files.dst.sort(sortFiles);
 		var join = new Joiner(files.src.length+files.dst.length+1);
 		var loop = function(srcIt, dstIt, qcb) {
 			console.log("loop(%j, %j, %d, %d): enter", srcHandle, dstHandle, srcIt, dstIt);
@@ -205,7 +239,7 @@ var rsyncDirectory = function(srcFs, srcHandle, dstFs, dstHandle, cb, qcb) {
 			if(	(dstIt === files.dst.length) ||
 				(srcIt < files.src.length && dstIt < files.dst.length && files.src[srcIt].name < files.dst[dstIt].name) ) {
 				console.log("loop(%j, %j, %d, %d): exit 2", srcHandle, dstHandle, srcIt, dstIt);
-				rsyncFile(srcFs, files.src[srcIt].handle, files.src[srcIt].name, dstFs, dstHandle, join.fun.bind(join), qcb);
+				rsyncFile(srcFs, files.src[srcIt].handle, files.src[srcIt].name, dstFs, dstHandle, files.src[srcIt].name, join.fun.bind(join), qcb);
 				nextSrcIt++;
 				
 			}
@@ -232,8 +266,7 @@ var rsyncDirectory = function(srcFs, srcHandle, dstFs, dstHandle, cb, qcb) {
 						console.log("loop(%j, %j, %d, %d): exit 5", srcHandle, dstHandle, srcIt, dstIt);
 					}
 					else if(!isDirectory.src && !isDirectory.dst) {
-						rsyncRegularFile(srcFs, files.src[srcIt].handle, files.src[srcIt].name, dstFs, dstHandle, files.dst[dstIt].handle, join.fun.bind(join)); 
-						qcb(null)
+						rsyncRegularFile(srcFs, files.src[srcIt].handle, files.src[srcIt].name, dstFs, dstHandle, files.dst[dstIt].handle, files.src[srcIt].name, join.fun.bind(join), qcb); 
 						console.log("loop(%j, %j, %d, %d): exit 6", srcHandle, dstHandle, srcIt, dstIt);
 					}
 					join.fun(null) // needed because join waits for src.length + dst.length. for this case we need 2 join.fun calls, this is the first one, 2nd one is with code above
@@ -247,17 +280,18 @@ var rsyncDirectory = function(srcFs, srcHandle, dstFs, dstHandle, cb, qcb) {
 		if(qcb) qcb(null)
 	});
 }
-
-var rsyncRegularFile = function(srcFs, srcHandle, name, dstFs, dstHandle, dstFileHandle, cb) {
-	debug("rsyncRegularFile %j %s %j %j", srcHandle, name, dstHandle, dstFileHandle);
+// rsync 2 existing files
+// contrary to copyRegularFile, the dest *file* handle is required as it is most likely available at the caller!
+var rsyncRegularFile = function(srcFs, srcHandle, name, dstFs, dstHandle, dstFileHandle, dstName, cb, qcb) {
+	debug("rsyncRegularFile %j %s %j %j %s", srcHandle, name, dstHandle, dstFileHandle, dstName);
 	async.parallel({
 		src: srcFs.getSize.bind(srcFs, srcHandle),
 		dst: dstFs.getSize.bind(dstFs, dstFileHandle)
 	}, function(err, size) {
 		if(size.src !== size.dst) {
 			dstFs.unlink(dstHandle, function(err) {
-				if(err) return cb(err);
-				copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, cb);
+				if(err) { if(qcb) qcb(null); return cb(err); }
+				copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb);
 			});
 		}
 		else {
@@ -265,12 +299,16 @@ var rsyncRegularFile = function(srcFs, srcHandle, name, dstFs, dstHandle, dstFil
 				src: srcFs.getMD5.bind(srcFs, srcHandle),
 				dst: dstFs.getMD5.bind(dstFs, dstFileHandle)
 			}, function(err, hash) {
+				if(err) { if(qcb) qcb(null); return cb(err); }
 				if(hash.src !== hash.dst) {
 					dstFs.unlink(files.dst[dstIt].handle, function(err) {
-						if(err) return cb(err);
-						copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, cb);
+						if(err) { if(qcb) qcb(null); return cb(err); }
+						copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb);
 					});
-				} else cb(null); // files are identical
+				} else {
+					if(qcb) qcb(null);
+					cb(null); // files are identical
+				}
 			});
 		}
 	});
@@ -309,10 +347,12 @@ var deleteDirectory = function(xfs, handle, cb, qcb) {
 	});
 }
 
-var rsyncFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb, qcb) {
-	debug("rsyncFile %j %s %j", srcHandle, name, dstHandle);
+
+// rsync a file into a directory
+var rsyncFile = function(srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb) {
+	debug("rsyncFile %j %s %j %s", srcHandle, name, dstHandle, dstName);
 	var dstExistsIsDirectory = function(cb) {
-		dstFs.exists(dstHandle, name, function(err, existsHandle) {
+		dstFs.exists(dstHandle, dstName, function(err, existsHandle) {
 			if(err) return cb(err);
 			if(!existsHandle.exists) return cb(null, { exists: false } );
 			dstFs.isDirectory(existsHandle.handle, function(err, isDirectory) {
@@ -328,7 +368,7 @@ var rsyncFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb, qcb) {
 		if(err) { qcb(null); return cb(err); }
 		if(results.srcIsDirectory) {
 			if(!results.dstExistsIsDirectory.exists) {
-				dstFs.createDirectory(dstHandle, name, function(err, handle) {
+				dstFs.createDirectory(dstHandle, dstName, function(err, handle) {
 					if(err) { qcb(null); return cb(err); }
 					rsyncDirectory(srcFs, srcHandle, dstFs, handle, cb, qcb);
 				});
@@ -337,7 +377,7 @@ var rsyncFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb, qcb) {
 			} else {
 				dstFs.unlink(results.dstExistsIsDirectory.handle, function(err) {
 					if(err) { qcb(null); return cb(err); }
-					dstFs.createDirectory(dstHandle, name, function(err, handle) {
+					dstFs.createDirectory(dstHandle, dstName, function(err, handle) {
 						if(err) return cb(err);
 						rsyncDirectory(srcFs, srcHandle, dstFs, handle, qcb);
 					});
@@ -345,15 +385,13 @@ var rsyncFile = function(srcFs, srcHandle, name, dstFs, dstHandle, cb, qcb) {
 			}
 		} else {
 			if(!results.dstExistsIsDirectory.exists) {
-				copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, cb);
-				if(qcb) qcb(null);
+				copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb);
 			} else if(!results.dstExistsIsDirectory.isDirectory) {
-				rsyncRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, results.dstExistsIsDirectory.handle, cb);
-				if(qcb) qcb(null);
+				rsyncRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, results.dstExistsIsDirectory.handle, dstName, cb, qcb);
 			} else {
 				dstFs.deleteDirectory(results.dstExistsIsDirectory.handle, function(err) {
 					if(err) { qcb(null); return cb(err); }
-					copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, cb, qcb);
+					copyRegularFile(srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb);
 				});
 			}
 		}
@@ -401,18 +439,20 @@ LazyCursor.prototype.get = function(cb) {
 			
 		});
 	}
-}
+};
 
-var resolveUrl = function(tUrl, options, cb) {
-	var protocol = tUrl.substr(0, tUrl.indexOf(":"));
-	var path = tUrl.substr(tUrl.indexOf(":") + 1);
+var resolvePath = function(tFullPath, options, cb) {
+	debug("resolvePath %s", tFullPath);
+	var protocol = tFullPath.substr(0, tFullPath.indexOf(":") + 1);
+	var tPath = tFullPath.substr(tFullPath.indexOf(":") + 1);
 	var tFsMod;
 	switch(protocol) {
-		case "acd":
+		case "acd:":
 			tFsMod = AcdFs;
 		break;
 		case "":
 			tFsMod = FsFs;
+			if(tPath === "") tPath = ".";
 		break;
 		default:
 			process.nextTick( cb.bind(null, new Error("Unknown protocol: " + protocol) ) );
@@ -421,10 +461,22 @@ var resolveUrl = function(tUrl, options, cb) {
 	}
 	tFsMod.createFs(options, function(err, tFs) {
 		if(err) return cb(err);
-		tFs.init(path, function(err, file){
+		tFs.init(tPath, function(err, file){
 			if(err) return cb(err);
 			cb(null, { fs: tFs, file: file });
 		});
+	})
+};
+
+
+var resolvePathParentAndName = function(tFullPath, options, cb) {
+	debug("resolvePathParentAndName %s", tFullPath);
+	var protocol = tFullPath.substr(0, tFullPath.indexOf(":") + 1);
+	var tPath = tFullPath.substr(tFullPath.indexOf(":") + 1);
+	var parsedPath = path.parse(tPath);
+	return resolvePath(protocol + parsedPath.dir, options, function(err, result){
+		if(err) return cb(err);
+		cb(null, { fs: result.fs, parent: result.file, name: parsedPath.name });
 	})
 };
 
@@ -434,20 +486,26 @@ var argvIt = 2;
 var command = process.argv[argvIt++];
 var options = {};
 var tasks = [];
+
+
+var fileArgs = [];
 for( ; argvIt < process.argv.length ; argvIt++) {
 	if(process.argv[argvIt].startsWith("--option-")) options[process.argv[argvIt].substr("--option-".length)] = process.argv[argvIt++];
 	else if(!process.argv[argvIt].startsWith("-")) {
-		tasks.push( resolveUrl.bind(null, process.argv[argvIt], options) )
+		fileArgs.push( { path: process.argv[argvIt], options: options } )
 		options = {};
 	}
 	else return cb( new Error("unrecognized option '" + process.argv[argvIt] + "'") )
 }
 
-async.parallel(tasks, function(err, results){
-	if(err) return cb(err);
-
-	switch(command) {
-		case "ls":
+var i;
+switch(command) {
+	case "ls":
+		for(i = 0 ; i < fileArgs.length ; ++i) {
+			tasks.push( resolvePath.bind(null, fileArgs[i].path, fileArgs[i].options)  );
+		}
+		async.parallel(tasks, function(err, results) {
+			if(err) return cb(err);
 			results.forEach(function(item) {
 				item.fs.listFiles(item.file.handle, function(err, files) {
 					if(err) return cb(err);
@@ -456,32 +514,52 @@ async.parallel(tasks, function(err, results){
 					})
 				})
 			})
-		break;
-		case "cp":
+		})
+	break;
+	case "cp":
+		for(i = 0 ; i < fileArgs.length - 1 ; ++i) {
+			tasks.push( resolvePath.bind(null, fileArgs[i].path, fileArgs[i].options)  );
+		}
+		tasks.push( resolvePathParentAndName.bind(null, fileArgs[fileArgs.length - 1].path, fileArgs[fileArgs.length - 1].options)  );
+		async.parallel(tasks, function(err, results) {
+			if(err) return cb(err);
 			var dest = results.pop();
 			results.forEach( function(item) {
-				copyFile(item.fs, item.file.handle, item.file.name, dest.fs, dest.file.handle, cb)
+				copyFile(item.fs, item.file.handle, item.file.name, dest.fs, dest.parent.handle, dest.name, cb)
 			})
-		break;
-		case "rm": 
+		})
+	break;
+	case "rm": 
+		for(i = 0 ; i < fileArgs.length ; ++i) {
+			tasks.push( resolvePath.bind(null, fileArgs[i].path, fileArgs[i].options)  );
+		}
+		async.parallel(tasks, function(err, results) {
+			if(err) return cb(err);
 			results.forEach( function(item) {
 				deleteFile(item.fs, item.file.handle, cb)
 			})
-		break;
-		case "rsync": 
+		})
+	break;
+	case "rsync": 
+		for(i = 0 ; i < fileArgs.length - 1 ; ++i) {
+			tasks.push( resolvePath.bind(null, fileArgs[i].path, fileArgs[i].options)  );
+		}
+		tasks.push( resolvePathParentAndName.bind(null, fileArgs[fileArgs.length - 1].path, fileArgs[fileArgs.length - 1].options)  );
+		async.parallel(tasks, function(err, results) {
+			if(err) return cb(err);
 			var dest = results.pop();
 			results.forEach( function(item) {
-				rsyncFile(item.fs, item.file.handle, item.file.name, dest.fs, dest.file.handle, cb)
+				rsyncFile(item.fs, item.file.handle, item.file.name, dest.fs, dest.parent.handle, dest.name, cb)
 			})
-		break;
-		default: 
-			process.nextTick( cb.bind(null, new Error("unrecognized command: " + command) ))
+		})
+	break;
+	default: 
+		process.nextTick( cb.bind(null, new Error("unrecognized command: " + command) ))
 
-		break;
-	}
+	break;
+}
 
 
-})
 
 
 })(function(err) {

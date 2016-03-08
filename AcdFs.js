@@ -51,12 +51,12 @@ AcdFs.prototype.exists = function(handle, name, cb) {
 	self.session.list_children(handle.node.id, {filters: "name:" + name }, function(err, items) {
 		if(err) return cb(err);
 		if(items.count === 0) return cb(null, { exists: false });
-		cb(null, { exists: true, handle: items.data[0] });
+		cb(null, { exists: true, handle: new AcdHandle(items.data[0]) });
 	});
 };
 
 AcdFs.prototype.createFile = function(handle, name, stream, size, cb) {
-	debug("AcdFs.createFile i%j, %s, %d", handle, name, size);
+	debug("AcdFs.createFile %j, %s, %d", handle, name, size);
 	var self = this;
 	self.session.upload({name: name, kind: "FILE", parents: [ handle.node.id ] }, stream, size, { suppress: "deduplication" }, function(err, file){
 		if(err) return cb(err);
@@ -77,7 +77,7 @@ AcdFs.prototype.isDirectory = function(handle, cb) {
         debug("AcdFs.isDirectory %j", handle);
         var self = this;
 	process.nextTick( function() {
-		cb(null, handle.kind === "FOLDER");
+		cb(null, handle.node.kind === "FOLDER");
 	});
 }
 
@@ -85,7 +85,7 @@ AcdFs.prototype.getSize = function(handle, cb) {
         debug("AcdFs.getSize %j", handle);
         var self = this;
 	process.nextTick( function() {
-		cb(null, handle.contentProperties.size);
+		cb(null, handle.node.contentProperties.size);
 	});
 }
 
@@ -93,7 +93,7 @@ AcdFs.prototype.getMD5 = function(handle, cb) {
         debug("AcdFs.getMD5 %j", handle);
         var self = this;
 	process.nextTick( function() {
-		cb(null, handle.contentProperties.md5);
+		cb(null, handle.node.contentProperties.md5);
 	});
 }
 
@@ -131,7 +131,7 @@ AcdFs.prototype.init = function(str, cb) {
 	var self = this;
 	self.session.resolve_path(str, function(err, result) {
 		if(err) return cb(err);
-		if(result.count === 0) return cb(new Error("ENOENT"));
+		if(result.count === 0) { var err = new Error(); err.code = "ENOENT"; return cb(err); }
 		cb(null, { name: path.parse(str).name, handle: new AcdHandle(result.data[0])});
 	});
 }

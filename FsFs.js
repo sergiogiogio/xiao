@@ -89,7 +89,7 @@ FsFs.prototype.getSize = function(handle, cb) {
 }
 
 FsFs.prototype.getMD5 = function(handle, cb) {
-	debug("FsFs.getMD5 %s", handle);
+	debug("FsFs.getMD5 %j", handle);
 	var self = this;
 	var fileStream = fs.createReadStream(handle.path());
 	var hash = crypto.createHash('md5');
@@ -102,7 +102,7 @@ FsFs.prototype.getMD5 = function(handle, cb) {
 }
 
 FsFs.prototype.readFile = function(handle, cb) {
-	debug("FsFs.readFile %s", handle);
+	debug("FsFs.readFile %j", handle);
 	var self = this;
 	process.nextTick( function() {
 		var stream = fs.createReadStream(handle.path());
@@ -111,13 +111,13 @@ FsFs.prototype.readFile = function(handle, cb) {
 }
 
 FsFs.prototype.unlink = function(handle, cb) {
-	debug("FsFs.unlink %s", handle);
+	debug("FsFs.unlink %j", handle);
 	var self = this;
 	fs.unlink(handle.path(), cb);
 }
 
 FsFs.prototype.rmdir = function(handle, cb) {
-	debug("FsFs.rmdir %s", handle);
+	debug("FsFs.rmdir %j", handle);
 	var self = this;
 	fs.rmdir(handle.path(), cb);
 }
@@ -137,8 +137,9 @@ FsFs.prototype.createDirectory = function(handle, name, cb) {
 FsFs.prototype.init = function(str, cb) {
 	debug("FsFs.init %s", str);
 	var self = this;
-	process.nextTick( function() {
-		cb(null, {name: path.parse(str).name, handle: new FsRootHandle(str)});
+	fs.stat(str, function(err, stats) {
+		if(err) return cb(err);
+		cb(null, { name: path.parse(str).name, handle: new FsRootHandle(str) });
 	});
 }
 
