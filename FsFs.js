@@ -139,7 +139,7 @@ FsFs.prototype.init = function(str, cb) {
 	var self = this;
 	fs.stat(str, function(err, stats) {
 		if(err) return cb(err);
-		cb(null, { name: path.parse(str).name, handle: new FsRootHandle(str) });
+		cb(null, { name: path.parse(str).base, handle: new FsRootHandle(str) });
 	});
 }
 
