@@ -118,7 +118,7 @@ AcdFs.prototype.rmdir = function(handle, cb) {
 
 
 AcdFs.prototype.createDirectory = function(handle, name, cb) {
-	debug("AcdFs.createFolder %j, %s", handle, name);
+	debug("AcdFs.createDirectory %j, %s", handle, name);
 	var self = this;
 	self.session.create_folder({kind: "FOLDER", name: name, parents: [handle.node.id] }, function(err, folder) {
 		if(err) return cb(err);

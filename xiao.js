@@ -122,15 +122,13 @@ var copyFiles = function (options, src, dstFs, dstHandle, dstName, cb, qcb) {
 
 	async.parallel(tasks, function(err, results) {
 		if(err) { if(qcb) qcb(null); return cb(err); }
-		if(src.length > 1) { // dst has to be dir 
-			if(!results.dstExistsIsDirectory.exists || !results.dstExistsIsDirectory.isDirectory) {
-				if(qcb) qcb(null);
-				return cb( new Error("target '" + dstName + "' is not a directory" ));
-			} else {
-				doCopy(results.dstExistsIsDirectory.handle, null);
-			}
-		} else { // src.length === 1 
+		if(results.dstExistsIsDirectory.exists && results.dstExistsIsDirectory.isDirectory) {
+			doCopy(results.dstExistsIsDirectory.handle, null)
+		} else if (src.length === 1) {
 			doCopy(dstHandle, dstName)
+		} else {
+			if(qcb) qcb(null);
+			return cb( new Error("target '" + dstName + "' is not a directory" ));
 		}
 	});
 }
@@ -516,7 +514,6 @@ var rsyncFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle, dstN
 	});
 	
 }
-
 var rsyncFiles = function (options, src, dstFs, dstHandle, dstName, cb, qcb) {
 	debug("rsyncFiles %j %j %j %s", options, src, dstHandle, dstName);
 	var tasks = {};
@@ -554,8 +551,29 @@ var rsyncFiles = function (options, src, dstFs, dstHandle, dstName, cb, qcb) {
 		}
 	});
 }
+var createDirectory = function (options, tFs, tPath, cb, qcb) {
+	debug("createDirectory %j %j %s", options, tFs, tPath);
 
-
+	if(tPath === "") tPath = ".";
+	tFs.init(tPath, function(err, file) {
+		if(err) {
+			var parsedPath = path.parse(tPath);
+			return createDirectory(options, tFs, parsedPath.dir, function(err, parent) {
+				if(err) { if(qcb) qcb(null); return cb(err); }
+				tFs.createDirectory(parent, parsedPath.base, function(err, file) {
+					if(qcb) qcb(null);
+					cb(err, file);
+				});
+			}, qcb);
+		}
+		tFs.isDirectory(file.handle, function(err, isDirectory) {
+			if(qcb) qcb(null);
+			if(err) return cb(err);
+			if(!isDirectory) { err = new Error("cannot create directory '" + tPath + "': File exists"); return cb(err); }
+			cb(null, file.handle);
+		})
+	});
+}
 
 var deleteItem = function(cursor, item, lazyCursor, cb) {
 	debug("deleteItem %j %s %j", cursor, item.name, lazyCursor);
@@ -597,8 +615,8 @@ LazyHandle.prototype.get = function(cb) {
 	}
 };
 
-var resolvePath = function(tFullPath, options, cb) {
-	debug("resolvePath %s", tFullPath);
+var resolvePathModule = function(tFullPath, options, cb) {
+	debug("resolvePathModule %s", tFullPath);
 	var protocol = tFullPath.substr(0, tFullPath.indexOf(":") + 1);
 	var tPath = tFullPath.substr(tFullPath.indexOf(":") + 1);
 	var tFsMod;
@@ -611,15 +629,23 @@ var resolvePath = function(tFullPath, options, cb) {
 			if(tPath === "") tPath = ".";
 		break;
 		default:
-			process.nextTick( cb.bind(null, new Error("Unknown protocol: " + protocol) ) );
+			return process.nextTick( cb.bind(null, new Error("Unknown protocol: " + protocol) ) );
 		break;
-
 	}
+	console.log("A %j %s", protocol, util.inspect(tFsMod));
 	tFsMod.createFs(options, function(err, tFs) {
 		if(err) return cb(err);
-		tFs.init(tPath, function(err, file){
+		cb(null, { fs: tFs, path: tPath });
+	})
+};
+
+var resolvePath = function(tFullPath, options, cb) {
+	debug("resolvePath %s", tFullPath);
+	resolvePathModule(tFullPath, options, function(err, result) {
+		if(err) return cb(err);
+		result.fs.init(result.path, function(err, file){
 			if(err) return cb(err);
-			cb(null, { fs: tFs, file: file });
+			cb(null, { fs: result.fs, file: file, path: result.path });
 		});
 	})
 };
@@ -631,7 +657,7 @@ var resolveParent = function(tFullPath, options, cb) {
 	var parsedPath = path.parse(tPath);
 	return resolvePath(protocol + parsedPath.dir, options, function(err, result){
 		if(err) return cb(err);
-		cb(null, { fs: result.fs, file: result.file, name: parsedPath.base });
+		cb(null, { fs: result.fs, file: result.file, path: parsedPath.dir, name: parsedPath.base });
 	})
 }
 
@@ -652,15 +678,16 @@ var resolvePathOrParent = function(tFullPath, options, cb) {
 var argvIt = 2;
 var command = process.argv[argvIt++];
 var options = {};
+var fileOptions = {};
 var tasks = [];
-
 
 var fileArgs = [];
 for( ; argvIt < process.argv.length ; argvIt++) {
-	if(process.argv[argvIt].startsWith("--option-")) options[process.argv[argvIt].substr("--option-".length)] = process.argv[argvIt++];
+	if(process.argv[argvIt].startsWith("--option-")) fileOptions[process.argv[argvIt].substr("--option-".length)] = process.argv[argvIt++];
+	else if(process.argv[argvIt].startsWith("-")) options[process.argv[argvIt].substr("-".length)] = true;
 	else if(!process.argv[argvIt].startsWith("-")) {
-		fileArgs.push( { path: process.argv[argvIt], options: options } )
-		options = {};
+		fileArgs.push( { path: process.argv[argvIt], options: fileOptions } )
+		fileOptions = {};
 	}
 	else return cb( new Error("unrecognized option '" + process.argv[argvIt] + "'") )
 }
@@ -705,6 +732,18 @@ switch(command) {
 			})
 		})
 	break;
+	case "mkdir": 
+		for(i = 0 ; i < fileArgs.length ; ++i) {
+			tasks.push( resolvePathModule.bind(null, fileArgs[i].path, fileArgs[i].options)  );
+		}
+		async.parallel(tasks, function(err, results) {
+			if(err) return cb(err);
+			results.forEach( function(item) {
+				console.log("%j", item);
+				createDirectory(options, item.fs, item.path, cb)
+			})
+		})
+	break;
 	case "rsync": 
 		for(i = 0 ; i < fileArgs.length - 1 ; ++i) {
 			tasks.push( resolvePath.bind(null, fileArgs[i].path, fileArgs[i].options)  );
@@ -727,6 +766,7 @@ switch(command) {
 
 })(function(err) {
 	console.log("result: %s", err || "SUCCESS");
+	process.exitCode = (err ? 1 : 0);
 })
 
 
