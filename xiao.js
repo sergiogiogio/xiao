@@ -380,6 +380,18 @@ var rsyncRegularFile = function(options, srcFs, srcHandle, name, dstFs, dstHandl
 	});
 }
 
+var deleteFilePath = function(options, tFs, tPath, cb, qcb) {
+	debug("deleteFilePath %j %j %s", options, tFs, tPath);
+	tFs.init(tPath, function(err, file) {
+		if(err && err.code == "ENOENT") { if(qcb) qcb(null); return cb(null); } // non existing file is not an error
+		else if(err) { if(qcb) qcb(err); return cb(err); }
+		deleteFile(tFs, file.handle, cb, qcb);
+	})
+	
+}
+
+
+
 var deleteFile = function(xfs, handle, cb, qcb) {
 	debug("deleteFile %j", handle);
 	xfs.isDirectory(handle, function(err, isDirectory) {
@@ -723,12 +735,12 @@ switch(command) {
 	break;
 	case "rm": 
 		for(i = 0 ; i < fileArgs.length ; ++i) {
-			tasks.push( resolvePath.bind(null, fileArgs[i].path, fileArgs[i].options)  );
+			tasks.push( resolvePathModule.bind(null, fileArgs[i].path, fileArgs[i].options)  );
 		}
 		async.parallel(tasks, function(err, results) {
 			if(err) return cb(err);
 			results.forEach( function(item) {
-				deleteFile(item.fs, item.file.handle, cb)
+				deleteFilePath(options, item.fs, item.path, cb)
 			})
 		})
 	break;
@@ -739,7 +751,6 @@ switch(command) {
 		async.parallel(tasks, function(err, results) {
 			if(err) return cb(err);
 			results.forEach( function(item) {
-				console.log("%j", item);
 				createDirectory(options, item.fs, item.path, cb)
 			})
 		})
