@@ -546,22 +546,22 @@ var rsyncFiles = function (options, src, dstFs, dstHandle, dstName, cb, qcb) {
 
 	async.parallel(tasks, function(err, results) {
 		if(err) { if(qcb) qcb(null); return cb(err); }
-		if(src.length > 1 || results.srcIsDirectory) { // has to be dir else create dir
+		if(results.dstExistsIsDirectory.exists && results.dstExistsIsDirectory.isDirectory) {
+			doRsync(results.dstExistsIsDirectory.handle, null);
+		} else if(src.length > 1 || results.srcIsDirectory) {
 			if(!results.dstExistsIsDirectory.exists) {
 				dstFs.createDirectory(dstHandle, dstName, function(err, handle) {
                                         if(err) { if(qcb) qcb(null); return cb(err); }
 					doRsync(handle, null);
                                 });
-			} else if(results.dstExistsIsDirectory.exists && results.dstExistsIsDirectory.isDirectory) {
-				doRsync(results.dstExistsIsDirectory.handle, null);
 			} else {
 				if(qcb) qcb(null);
 				return cb( new Error("ERROR: destination must be a directory when copying more than 1 file" ));
 			}
-		} else { // src.length === 1 && !results.srcIsDirectory
+		} else { // dest is not a directory (or does not exist) && only 1 source (regular file)
 			doRsync(dstHandle, dstName)
 		}
-	});
+	})
 }
 var createDirectory = function (options, tFs, tPath, cb, qcb) {
 	debug("createDirectory %j %j %s", options, tFs, tPath);
@@ -644,7 +644,6 @@ var resolvePathModule = function(tFullPath, options, cb) {
 			return process.nextTick( cb.bind(null, new Error("Unknown protocol: " + protocol) ) );
 		break;
 	}
-	console.log("A %j %s", protocol, util.inspect(tFsMod));
 	tFsMod.createFs(options, function(err, tFs) {
 		if(err) return cb(err);
 		cb(null, { fs: tFs, path: tPath });
