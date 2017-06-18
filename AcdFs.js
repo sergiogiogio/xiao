@@ -132,7 +132,7 @@ AcdFs.prototype.init = function(str, cb) {
 	self.session.resolve_path(str, function(err, result) {
 		if(err) return cb(err);
 		if(result.count === 0) { var err = new Error(); err.code = "ENOENT"; return cb(err); }
-		cb(null, { name: path.parse(str).name, handle: new AcdHandle(result.data[0])});
+		cb(null, { name: path.parse(str).base, handle: new AcdHandle(result.data[0])});
 	});
 }
 

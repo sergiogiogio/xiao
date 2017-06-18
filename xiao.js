@@ -11,6 +11,7 @@ var url = require('url');
 var Transform = require('stream').Transform;
 
 var AcdFs = require("./AcdFs");
+var GoogleFs = require("./GoogleFs");
 var FsFs = require("./FsFs");
 var Join = require("./Join");
 
@@ -260,7 +261,7 @@ var copyRegularFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle
 							streamCounter.unpipe();
 							streamCounter.end();
 							stream.unpipe(); // else the stream continues despite of the error?
-							stream.end();
+							//stream.end(); // end is not a method of readstreams
 						}
 						activityMonitor.end(activityId);
 						qcb(null);
@@ -635,6 +636,9 @@ var resolvePathModule = function(tFullPath, options, cb) {
 	switch(protocol) {
 		case "acd:":
 			tFsMod = AcdFs;
+		break;
+		case "gd:":
+			tFsMod = GoogleFs;
 		break;
 		case "":
 			tFsMod = FsFs;
