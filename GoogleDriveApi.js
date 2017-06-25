@@ -107,9 +107,7 @@ Session.prototype.refresh_token = function(cb) {
 	var fname = "refresh_token";
 	debug(fname);
 	var self = this;
-	var data = querystring.stringify({
-		refresh_token: self.token
-	});
+	var data = querystring.stringify( self.token );
 	var requestId = sRequestId++;
 	var request_opt = {
 		host: "acdc-sergiogiogio.rhcloud.com",
@@ -333,7 +331,7 @@ Session.prototype.upload = function(metadata, stream, streamlength, options, cb)
 	var self = this;
 
 	var mult_multipart = [ { 'content-type': 'application/json; charset=UTF-8', body: JSON.stringify(metadata) } ];
-	if(stream) mult_multipart.push( { 'content-type': mime.contentType(metadata.name), body: stream } );
+	if(stream) mult_multipart.push( { 'content-type': (mime.contentType(metadata.name) || "application/octet-stream"), body: stream } );
 	var mult = multipart({
 		multipart: mult_multipart
 	});
@@ -387,7 +385,7 @@ Session.prototype.update = function(nodeid, metadata, stream, streamlength, opti
 	var mult = multipart({
 		multipart: [
 			{ 'content-type': 'application/json; charset=UTF-8', body: JSON.stringify(metadata) },
-			{ 'content-type': mime.contentType(metadata.name), body: stream }
+			{ 'content-type': (mime.contentType(metadata.name) || "application/octet-stream"), body: stream }
 		]
 	});
 
