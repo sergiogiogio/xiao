@@ -243,7 +243,7 @@ var GDriveError = function(code, message) {
 
 Session.prototype.resolve_path = function(node_path, options, cb) {
 	var fname = "resolve_path";
-	debug(fname + "(%s)", node_path, options);
+	debug(fname + "(%s, %j)", node_path, options);
 	var self = this;
 	var parse = path.parse(node_path);
 	switch(parse.base) {
@@ -338,7 +338,7 @@ Session.prototype.upload = function(metadata, stream, streamlength, options, cb)
 
 	var length = 0;
 	mult.body._items.forEach( function(item) {
-		if(typeof item === 'string') length += item.length;
+		if(typeof item === 'string') length += Buffer.byteLength(item, "utf8");
 		else length += streamlength;
 	});
 	self.request(null,

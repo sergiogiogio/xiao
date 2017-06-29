@@ -55,8 +55,8 @@ AcdFs.prototype.exists = function(handle, name, cb) {
 	});
 };
 
-AcdFs.prototype.createFile = function(handle, name, stream, size, cb) {
-	debug("AcdFs.createFile %j, %s, %d", handle, name, size);
+AcdFs.prototype.createFile = function(handle, name, stream, size, options, cb) {
+	debug("AcdFs.createFile %j, %s, %d, %j", handle, name, size, options);
 	var self = this;
 	self.session.upload({name: name, kind: "FILE", parents: [ handle.node.id ] }, stream, size, { suppress: "deduplication" }, function(err, file){
 		if(err) return cb(err);

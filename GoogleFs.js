@@ -9,7 +9,7 @@ var path = require("path");
 var debug = require("debug")("GoogleFs")
 var util = require("util");
 
-var sFields="kind,id,name,mimeType,size,md5Checksum"
+var sFields="kind,id,name,mimeType,size,md5Checksum,createdTime,modifiedTime"
 
 var GDriveFs = function(options) {
 }
@@ -56,10 +56,13 @@ GDriveFs.prototype.exists = function(handle, name, cb) {
 	});
 };
 
-GDriveFs.prototype.createFile = function(handle, name, stream, size, cb) {
-	debug("GDriveFs.createFile %j, %s, %d", handle, name, size);
+GDriveFs.prototype.createFile = function(handle, name, stream, size, options, cb) {
+	debug("GDriveFs.createFile %j, %s, %d, %j", handle, name, size, options);
 	var self = this;
-	self.session.upload({name: name, parents: [ handle.node.id ] }, stream, size, {fields:sFields}, function(err, file){
+	var upload_opt = {name: name, parents: [ handle.node.id ] };
+	if(options.createdTime) upload_opt.createdTime = options.createdTime;
+	if(options.modifiedTime) upload_opt.modifiedTime = options.modifiedTime;
+	self.session.upload(upload_opt, stream, size, {fields:sFields}, function(err, file){
 		if(err) return cb(err);
 		return cb(null, new GDriveHandle(file));
 	});
@@ -91,6 +94,25 @@ GDriveFs.prototype.getSize = function(handle, cb) {
 	});
 	
 }
+
+GDriveFs.prototype.getCreatedTime = function(handle, cb) {
+        debug("GDriveFs.getCreatedTime %j", handle);
+        var self = this;
+	process.nextTick( function() {
+		cb(null, new Date(handle.node.createdTime));
+	});
+	
+}
+
+GDriveFs.prototype.getModifiedTime = function(handle, cb) {
+        debug("GDriveFs.getModifiedTime %j", handle);
+        var self = this;
+	process.nextTick( function() {
+		cb(null, new Date(handle.node.modifiedTime));
+	});
+	
+}
+
 
 GDriveFs.prototype.getMD5 = function(handle, cb) {
         debug("GDriveFs.getMD5 %j", handle);

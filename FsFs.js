@@ -15,13 +15,13 @@ var FsHandle = function(parent, name) {
 	this.name = name;
 }
 FsHandle.prototype.path = function() {
-	return path.join(this.parent.path(), this.name);
+	return Buffer.concat([ this.parent.path(), Buffer.from(path.sep), this.name ]);
 }
 
 
 
 var FsRootHandle = function(path) {
-	this._path = path;
+	this._path = Buffer.from(path);
 }
 
 util.inherits(FsRootHandle, FsHandle);
@@ -32,20 +32,20 @@ FsRootHandle.prototype.path = function() {
 
 
 FsFs.prototype.listFiles = function(handle, cb) {
-	debug("FsFs.listFiles");
+	debug("FsFs.listFiles %j", handle);
 	var self = this;
-	fs.readdir(handle.path(), function(err, filenames) {
+	fs.readdir(handle.path(), { encoding: 'buffer' }, function(err, filenames) {
 		if(err) return cb(err);
 		var files = new Array(filenames.length);
 		for(var i = 0 ; i < filenames.length ; ++i) {
-			files[i] = { name: filenames[i], handle: new FsHandle(handle, filenames[i]) };
+			files[i] = { name: filenames[i].toString(), handle: new FsHandle(handle, filenames[i]) };
 		}
 		cb(err, files);
 	});
 };
 
-FsFs.prototype.createFile = function(handle, name, stream, size, cb) {
-	debug("FsFs.createFile %j, %s, %d", handle, name, size);
+FsFs.prototype.createFile = function(handle, name, stream, size, options, cb) {
+	debug("FsFs.createFile %j, %s, %d, %j", handle, name, size, options);
 	var self = this;
 	var newHandle = new FsHandle(handle, name);
 	var wstream = fs.createWriteStream(newHandle.path());
@@ -85,6 +85,15 @@ FsFs.prototype.getSize = function(handle, cb) {
 	fs.stat(handle.path(), function(err, stats) {
 		if(err) return cb(err);
 		return cb(null, stats.size);
+	});
+}
+
+FsFs.prototype.getModifiedTime = function(handle, cb) {
+	debug("FsFs.getModifiedTime %j", handle);
+	var self = this;
+	fs.stat(handle.path(), function(err, stats) {
+		if(err) return cb(err);
+		return cb(null, stats.mtime);
 	});
 }
 
