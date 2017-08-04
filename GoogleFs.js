@@ -20,7 +20,7 @@ var GDriveHandle = function(node) {
 
 GDriveFs.prototype._listFiles = function(handle, startToken, files, cb) {
 	var self = this;
-	var list_options = { q: "'"+handle.node.id+"' in parents", fields:sFields };
+	var list_options = { q: "'"+handle.node.id+"' in parents and trashed=false", fields:sFields };
 	if(startToken) list_options.pageToken = startToken;
 	self.session.list(list_options, function(err, items) {
 		if(err) return cb(err);
