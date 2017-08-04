@@ -97,6 +97,36 @@ AcdFs.prototype.getMD5 = function(handle, cb) {
 	});
 }
 
+
+
+AcdFs.prototype.getModifiedTime = function(handle, cb) {
+        debug("AcdFs.getModifiedTime %j", handle);
+        var self = this;
+        process.nextTick( function() {
+                cb(null, new Date(handle.node.modifiedDate));
+        });
+}
+
+AcdFs.prototype.getCreatedTime = function(handle, cb) {
+        debug("AcdFs.getCreatedTime %j", handle);
+        var self = this;
+        process.nextTick( function() {
+                cb(null, new Date(handle.node.createdDate));
+        });
+}
+
+AcdFs.prototype.getRoot = function(str, cb) {
+       debug("AcdFs.getRoot %s", str);
+       var self = this;
+       self.session.get_root(function(err, result) {
+               if(err) return cb(err);
+               if(result.count === 0) { var err = new Error(); err.code = "ENOENT"; return cb(err); }
+               cb(null, { name: str, handle: new AcdHandle(result.data[0])});
+       });
+}
+
+
+
 AcdFs.prototype.unlink = function(handle, cb) {
 	debug("AcdFs.unlink %j", handle);
 	var self = this;

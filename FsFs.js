@@ -143,6 +143,23 @@ FsFs.prototype.createDirectory = function(handle, name, cb) {
 	});
 }
 
+FsFs.prototype.getCurrentDirectory = function(cb) {
+	debug("FsFs.getCurrentDirectory");
+	var self = this;
+	process.nextTick( function() {
+		cb(null, process.cwd())
+	} )
+}
+
+
+FsFs.prototype.getRoot = function(str, cb) {
+	debug("FsFs.getRoot %s", str);
+	var self = this;
+	fs.stat(str, function(err, stats) {
+		if(err) return cb(err);
+		cb(null, { name: str, handle: new FsRootHandle(str) });
+	});
+}
 FsFs.prototype.init = function(str, cb) {
 	debug("FsFs.init %s", str);
 	var self = this;

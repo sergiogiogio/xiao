@@ -605,7 +605,7 @@ var deleteItem = function(cursor, item, lazyCursor, cb) {
 			if(err) return cb(err);
 			cursor.deleteItem(item, cb);
 		});
-	});
+	})
 }
 
 var LazyHandle = function(xfs, handle, name) {
@@ -667,10 +667,14 @@ var resolvePattern = function(tPattern, options, cb) {
 	debug("resolvePattern %s", tPattern);
 	resolvePathModule(tPattern, options, function(err, result) {
 		if(err) return cb(err);
-		_resolvePattern(result.fs, result.path, function(err, files){
-			if(err) return cb(err);
-			cb(null, files);
-		});
+		var fun = result.fs.getCurrentDirectory || function(cb) { process.nextTick( function() { cb(null, "/") } ) }
+		fun.call(result.fs, function(err, cwd) {
+			var absolutePath = path.resolve(cwd, result.path);
+			_resolvePattern(result.fs, absolutePath, function(err, files){
+				if(err) return cb(err);
+				cb(null, files);
+			});
+		})
 	})
 	
 	
@@ -682,9 +686,9 @@ var _resolvePattern = function(tFs, tPattern, cb) {
 	var ret = [];
 	switch(parse.base) {
 		case "":
-		tFs.init(parse.root || ".", function(err, file){
+		tFs.getRoot(parse.root, function(err, file){
 			if(err) return cb(err);
-			cb(null, [ { fs: tFs, file: file, path: parse.root || "." } ]);
+			cb(null, [ { fs: tFs, file: file, path: parse.root } ]);
 		});
 		break;
 		default:
@@ -695,6 +699,7 @@ var _resolvePattern = function(tFs, tPattern, cb) {
 					tFs.listFiles(item.file.handle, function(err, files) {
 						if(err) return cb(err);
 						files.forEach(function(file) {
+							//console.log("minimatch %s %s", file.name, parse.base);
 							if(minimatch(file.name, parse.base))
 								ret.push({ fs: tFs, file: file, path: path.join(item.path, file.name) });
 						})
@@ -798,10 +803,9 @@ switch(command) {
 		})
 	break;
 	case "cp":
-		for(i = 0 ; i < fileArgs.length - 1 ; ++i) {
+		for(i = 0 ; i < fileArgs.length ; ++i) {
 			tasks.push( resolvePattern.bind(null, fileArgs[i].path, fileArgs[i].options)  );
 		}
-		tasks.push( resolveParent.bind(null, fileArgs[fileArgs.length - 1].path, fileArgs[fileArgs.length - 1].options)  );
 		async.parallel(tasks, function(err, results) {
 			if(err) return cb(err);
 			results = [].concat.apply([], results); // flatten results (array of array -> array)
@@ -832,7 +836,7 @@ switch(command) {
 		})
 	break;
 	case "rsync": 
-		for(i = 0 ; i < fileArgs.length - 1 ; ++i) {
+		for(i = 0 ; i < fileArgs.length - 1; ++i) {
 			tasks.push( resolvePattern.bind(null, fileArgs[i].path, fileArgs[i].options)  );
 		}
 		tasks.push( resolveParent.bind(null, fileArgs[fileArgs.length - 1].path, fileArgs[fileArgs.length - 1].options)  );

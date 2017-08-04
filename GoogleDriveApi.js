@@ -241,6 +241,27 @@ var GDriveError = function(code, message) {
 }
 
 
+Session.prototype.get_root = function(options, cb) {
+	var fname = "get_root";
+	debug(fname + "(%j)", options);
+	var self = this;
+	self.request(null,
+		function(opt) {
+			opt.host = url.parse(rootUrl).host;
+			opt.path = url.parse(rootUrl).pathname + "files/root" 
+			opt.method = "GET";
+		}, function(req) {
+			req.end();
+		}, function(err, res, requestId) {
+			if(err) return call_cb(fname, cb, err);
+			self.read_response(res, requestId, JSON.parse, function(err, body) {
+				if(err) return call_cb(fname, cb, err);
+				call_cb(fname, cb, null, { files: [body] });	
+			});	
+		}
+	);
+}
+
 Session.prototype.resolve_path = function(node_path, options, cb) {
 	var fname = "resolve_path";
 	debug(fname + "(%s, %j)", node_path, options);
@@ -379,19 +400,19 @@ Session.prototype.download = function(nodeid, cb) {
 
 Session.prototype.update = function(nodeid, metadata, stream, streamlength, options, cb) {
 	var fname = "update";
-	debug(fname + "(%j, %d, %j)", metadata, streamlength, options);
+	debug(fname + "(%s, %j, %d, %j)", nodeid, metadata, streamlength, options);
 	var self = this;
-	
+
+	var mult_multipart = [];
+	if(metadata) mult_multipart.push( { 'content-type': 'application/json; charset=UTF-8', body: JSON.stringify(metadata) }  );
+	if(stream) mult_multipart.push(  { 'content-type': (mime.contentType(metadata.name) || "application/octet-stream"), body: stream } );
 	var mult = multipart({
-		multipart: [
-			{ 'content-type': 'application/json; charset=UTF-8', body: JSON.stringify(metadata) },
-			{ 'content-type': (mime.contentType(metadata.name) || "application/octet-stream"), body: stream }
-		]
+		multipart: mult_multipart
 	});
 
 	var length = 0;
 	mult.body._items.forEach( function(item) {
-		if(typeof item === 'string') length += item.length;
+		if(typeof item === 'string') length += Buffer.byteLength(item, "utf8");
 		else length += streamlength;
 	});
 	self.request(null,
@@ -410,7 +431,6 @@ Session.prototype.update = function(nodeid, metadata, stream, streamlength, opti
 		}
 	);
 };
-
 
 Session.prototype.create_folder = function(metadata, options, cb) {
 	var fname = "create_folder";

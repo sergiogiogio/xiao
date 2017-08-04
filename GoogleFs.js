@@ -161,6 +161,15 @@ GDriveFs.prototype.init = function(str, cb) {
 	});
 }
 
+GDriveFs.prototype.getRoot = function(str, cb) {
+	debug("GDriveFs.getRoot %s", str);
+	var self = this;
+	self.session.get_root({fields:sFields}, function(err, result) {
+		if(err) return cb(err);
+		if(result.files.length === 0) { var err = new Error(); err.code = "ENOENT"; return cb(err); }
+		cb(null, { name: str, handle: new GDriveHandle(result.files[0])});
+	});
+}
 GDriveFs.prototype._initialize = function(options, cb) {
 	debug("GDriveFs._initialize");
 	var self = this;
