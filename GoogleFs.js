@@ -49,7 +49,7 @@ GDriveFs.prototype.listFiles = function(handle, cb) {
 GDriveFs.prototype.exists = function(handle, name, cb) {
 	debug("GDriveFs.exists %s", name);
 	var self = this;
-	self.session.list({q: "name='" + name + "' and '"+ handle.node.id +"' in parents", fields:sFields }, function(err, items) {
+	self.session.list({q: "name='" + name + "' and '"+ handle.node.id +"' in parents and trashed=false", fields:sFields }, function(err, items) {
 		if(err) return cb(err);
 		if(items.files.length === 0) return cb(null, { exists: false });
 		cb(null, { exists: true, handle: new GDriveHandle(items.files[0]) });

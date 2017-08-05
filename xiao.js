@@ -803,9 +803,10 @@ switch(command) {
 		})
 	break;
 	case "cp":
-		for(i = 0 ; i < fileArgs.length ; ++i) {
+		for(i = 0 ; i < fileArgs.length - 1; ++i) {
 			tasks.push( resolvePattern.bind(null, fileArgs[i].path, fileArgs[i].options)  );
 		}
+		tasks.push( resolveParent.bind(null, fileArgs[fileArgs.length - 1].path, fileArgs[fileArgs.length - 1].options)  );
 		async.parallel(tasks, function(err, results) {
 			if(err) return cb(err);
 			results = [].concat.apply([], results); // flatten results (array of array -> array)
