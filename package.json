@@ -3,14 +3,21 @@
   "version": "0.0.2",
   "dependencies": {
     "@request/multipart": "^0.1.1",
-    "acdc": "git+https://github.com/sergiogiogio/Acdc.git",
     "async": "*",
     "minimatch": "*",
+    "debug": "*",
+    "cookie": "*",
     "googleapis": "^19.0.0"
   },
   "description": "a cross protocol input and output",
   "main": "xiao.js",
-  "files": ["xiao.js", "GoogleFs.js", "GoogleDriveApi.js", "AcdFs.js", "FsFs.js"],
+  "files": [
+    "xiao.js",
+    "GoogleFs.js",
+    "GoogleDriveApi.js",
+    "AcdFs.js",
+    "FsFs.js"
+  ],
   "directories": {
     "example": "examples"
   },
