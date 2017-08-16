@@ -34,7 +34,12 @@ Joiner.prototype.fun = function(err) {
 }
 
 //var queue = async.queue(function(fun, cb) { var cbCalled = false; var qcb = function(err) { if(!CbCalled) { cbCalled = true; return cb(err); } } fun(qcb, qcb); }, 1);
-var queue = async.queue(function(fun, cb) { fun(cb); }, 5);
+var sQueueJobId = 0;
+var queue = async.queue(function(fun, cb) { var jobId=sQueueJobId++; var qcb=function(err) { debug_dev("queue callback %d %s", jobId, err); cb(err) }; qcb.jobId = jobId; fun(qcb); }, 5);
+var qcbJobId = function(qcb) {
+	if(qcb === undefined) return 0;
+	return qcb.jobId;
+}
 
 // copy directory content 
 /*var copyDirectory = function(srcFs, srcHandle, dstFs, dstHandle, cb, qcb) {
@@ -72,7 +77,7 @@ var copyDirectory = function(options, srcFs, srcHandle, dstFs, dstHandle, cb, qc
 
 
 var copyFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb) {
-	debug("copyFile %j %j %s %j %s", options, srcHandle, name, dstHandle, dstName);
+	debug("copyFile %j %j %s %j %s %d", options, srcHandle, name, dstHandle, dstName, qcbJobId(qcb));
 	async.parallel({
 		srcIsDirectory: srcFs.isDirectory.bind(srcFs, srcHandle),
 		dstExistsIsDirectory: existsAndIsDirectory.bind(null, dstFs, dstHandle, dstName)
@@ -109,7 +114,7 @@ var copyFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle, dstNa
 
 
 var copyFiles = function (options, src, dstFs, dstHandle, dstName, cb, qcb) {
-	debug("copyFiles %j %j %j %s", options, src, dstHandle, dstName);
+	debug("copyFiles %j %j %j %s %d", options, src, dstHandle, dstName, qcbJobId(qcb));
 	var tasks = {};
 
 	tasks.dstExistsIsDirectory = existsAndIsDirectory.bind(null, dstFs, dstHandle, dstName);
@@ -235,11 +240,14 @@ StreamCounter.prototype._transform = function (data, encoding, callback) {
 // name: name of the file
 // dstHandle: handle of the directory
 var copyRegularFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb) {
-	debug("copyRegularFile %j %s %j %s", srcHandle, name, dstHandle, dstName);
+	debug("copyRegularFile %j %s %j %s %d", srcHandle, name, dstHandle, dstName, qcbJobId(qcb));
 	srcFs.getSize(srcHandle, function(err, size) {	
 		if(err) { if(qcb) qcb(null); return cb(err); }
 		srcFs.readFile(srcHandle, function(err, stream) {
-			if(err) { if(qcb) qcb(null); return cb(err); }
+			if(err) {
+				debug("copyRegularFile:readFile(err) %j %s %j %s %s", srcHandle, name, dstHandle, dstName, err);
+				if(qcb) qcb(null); return cb(err);
+			}
 
 			
 			var doCopy = function(qcb) {
@@ -289,7 +297,7 @@ var copyRegularFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle
 
 
 var rsyncDirectory = function(options, srcFs, srcHandle, dstFs, dstHandle, cb, qcb) {
-	debug("rsyncDirectory %j %j %j", options, srcHandle, dstHandle);
+	debug("rsyncDirectory %j %j %j %d", options, srcHandle, dstHandle, qcbJobId(qcb));
 	async.parallel({
 		src: srcFs.listFiles.bind(srcFs, srcHandle),
 		dst: dstFs.listFiles.bind(dstFs, dstHandle)
@@ -358,7 +366,7 @@ var rsyncDirectory = function(options, srcFs, srcHandle, dstFs, dstHandle, cb, q
 // rsync 2 existing files
 // contrary to copyRegularFile, the dest *file* handle is required as it is most likely available at the caller!
 var rsyncRegularFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle, dstFileHandle, dstName, cb, qcb) {
-	debug("rsyncRegularFile %j %s %j %j %s", srcHandle, name, dstHandle, dstFileHandle, dstName);
+	debug("rsyncRegularFile %j %s %j %j %s %d", srcHandle, name, dstHandle, dstFileHandle, dstName, qcbJobId(qcb));
 	async.parallel({
 		src: srcFs.getSize.bind(srcFs, srcHandle),
 		dst: dstFs.getSize.bind(dstFs, dstFileHandle)
@@ -391,7 +399,7 @@ var rsyncRegularFile = function(options, srcFs, srcHandle, name, dstFs, dstHandl
 }
 
 var deleteFilePath = function(options, tFs, tPath, cb, qcb) {
-	debug("deleteFilePath %j %j %s", options, tFs, tPath);
+	debug("deleteFilePath %j %j %s %d", options, tFs, tPath, qcbJobId(qcb));
 	tFs.init(tPath, function(err, file) {
 		if(err && err.code == "ENOENT") { if(qcb) qcb(null); return cb(null); } // non existing file is not an error
 		else if(err) { if(qcb) qcb(err); return cb(err); }
@@ -403,7 +411,7 @@ var deleteFilePath = function(options, tFs, tPath, cb, qcb) {
 
 
 var deleteFile = function(xfs, handle, cb, qcb) {
-	debug("deleteFile %j", handle);
+	debug("deleteFile %j %d", handle, qcbJobId(qcb));
 	xfs.isDirectory(handle, function(err, isDirectory) {
 		if(err) { if(qcb) qcb(err); return cb(err); }
 		if(isDirectory) {
@@ -500,7 +508,7 @@ var existsAndIsDirectory = function(fs, handle, name, cb) {
 }
 
 var rsyncFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb) {
-	debug("rsyncFile %j %j %s %j %s", options, srcHandle, name, dstHandle, dstName);
+	debug("rsyncFile %j %j %s %j %s %d", options, srcHandle, name, dstHandle, dstName, qcbJobId(qcb));
 	async.parallel({
 		srcIsDirectory: srcFs.isDirectory.bind(null, srcHandle),
 		dstExistsIsDirectory: existsAndIsDirectory.bind(null, dstFs, dstHandle, dstName)
@@ -537,7 +545,7 @@ var rsyncFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle, dstN
 	
 }
 var rsyncFiles = function (options, src, dstFs, dstHandle, dstName, cb, qcb) {
-	debug("rsyncFiles %j %j %j %s", options, src, dstHandle, dstName);
+	debug("rsyncFiles %j %j %j %s %d", options, src, dstHandle, dstName, qcbJobId(qcb));
 	var tasks = {};
 
 	if(src.length === 1) {

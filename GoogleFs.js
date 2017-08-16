@@ -25,15 +25,17 @@ GDriveFs.prototype._listFiles = function(handle, startToken, files, cb) {
 	self.session.list(list_options, function(err, items) {
 		if(err) return cb(err);
 		items.files.forEach(function(child, index) {
+			var name = child.name;
+			name = name.replace(/\//g, "\uFF0F");
 			/*var item = { name: child.name, nodeid: child.id, isDirectory: (child.kind === "FOLDER") };
 			if(child.kind !== "FOLDER") {
 				item.size = child.contentProperties.size;
 				item.md5 =  child.contentProperties.md5;
 			}*/
-			files.push( { name: child.name, handle: new GDriveHandle(child) } );
+			files.push( { name: name, handle: new GDriveHandle(child) } );
 		});
-		if(items.nextToken) {
-			return self.listFiles(startToken, files, cb);
+		if(items.nextPageToken) {
+			return self._listFiles(handle, items.nextPageToken, files, cb);
 		} else cb(null, files);
 
 	});

@@ -155,6 +155,8 @@ Session.prototype.request = function(cb_pre, cb_opt, cb_req, cb_res) {
 	var requestId = sRequestId++;
 	var req = module.request(req_options, function(res) {
 		debugTransport("Response(%d): %d, Headers: %j", requestId, res.statusCode, res.headers);
+		req.removeListener("error",cb_res); // else, cb_res may be called again if the connection is reset
+		req.on("error", function(err) { res.emit("error", err) });
 		switch(res.statusCode) {
 			case 401: {
 				self.refresh_token( function(err) {
@@ -201,7 +203,7 @@ Session.prototype.list = function(options, cb) {
 	debug(fname + "(%j)", options);
 	var self = this;
 	var qOptions = JSON.parse(JSON.stringify(options));
-	if(qOptions.fields) qOptions.fields="files(" + qOptions.fields + ")"
+	if(qOptions.fields) qOptions.fields="kind,nextPageToken,incompleteSearch,files(" + qOptions.fields + ")"
 	self.request(null,
 		function(opt) {
 			opt.host = url.parse(rootUrl).host;
