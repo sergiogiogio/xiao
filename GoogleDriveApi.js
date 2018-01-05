@@ -67,7 +67,7 @@ Session.prototype.authorize = function(cb) {
 	var self = this;
 	var sessionRequestId = sRequestId++;
 	var request_opt = {
-		host: "acdc-sergiogiogio.rhcloud.com",
+		host: "peaceful-tor-97834.herokuapp.com",
 		path: "/get_session",
 		method: "GET"
 	};
@@ -75,10 +75,10 @@ Session.prototype.authorize = function(cb) {
 		debugTransport("Response(%d): %d, Headers: %j", sessionRequestId, res.statusCode, res.headers);
 		if(res.statusCode !== 200) return cb(new Error("Cannot connect"));
 		var parsedCookies = cookie.parse(res.headers["set-cookie"][0]);
-		console.log("please open browser https://acdc-sergiogiogio.rhcloud.com/google/authorize?session=" + parsedCookies.session);
+		console.log("please open browser https://peaceful-tor-97834.herokuapp.com/google/authorize?session=" + parsedCookies.session);
 		var tokenRequestId = sRequestId++;
 		var request_opt = {
-			host: "acdc-sergiogiogio.rhcloud.com",
+			host: "peaceful-tor-97834.herokuapp.com",
 			path: "/get_token",
 			method: "GET",
 			headers: {
@@ -110,7 +110,7 @@ Session.prototype.refresh_token = function(cb) {
 	var data = querystring.stringify( self.token );
 	var requestId = sRequestId++;
 	var request_opt = {
-		host: "acdc-sergiogiogio.rhcloud.com",
+		host: "peaceful-tor-97834.herokuapp.com",
 		path: "/google/refresh_token",
 		method: "POST",
 		headers: {

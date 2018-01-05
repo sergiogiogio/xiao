@@ -180,8 +180,9 @@ GDriveFs.prototype._initialize = function(options, cb) {
 		if(err && err.code === "ENOENT") debug("Could not read token file: error %s", err)
 		var token = !err && JSON.parse(data);
 		self.session = new Api.Session(token);
-		self.session.on("newToken", function(token) {
-			fs.writeFile(self.tokenFile, JSON.stringify(token), function(err) {
+		self.session.on("newToken", function(newToken) {
+			newToken.refresh_token= newToken.refresh_token || token.refresh_token;
+			fs.writeFile(self.tokenFile, JSON.stringify(newToken), function(err) {
 				if(err) return debug("Could not write token file: error %s", err);
 				debug("Token file written successfully");
 			});
