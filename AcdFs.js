@@ -1,7 +1,7 @@
 'use strict'
 
 
-var Api = require("acdc");
+var Api = require("./AcdApi");
 
 var fs = require("fs");
 var async = require("async");
