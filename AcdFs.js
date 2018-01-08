@@ -48,7 +48,7 @@ AcdFs.prototype.listFiles = function(handle, cb) {
 AcdFs.prototype.exists = function(handle, name, cb) {
 	debug("AcdFs.exists %s", name);
 	var self = this;
-	self.session.list_children(handle.node.id, {filters: "name:" + name }, function(err, items) {
+	self.session.list_children(handle.node.id, {filters: "name:" + name.replace(/ /g,"\\ ") }, function(err, items) {
 		if(err) return cb(err);
 		if(items.count === 0) return cb(null, { exists: false });
 		cb(null, { exists: true, handle: new AcdHandle(items.data[0]) });
