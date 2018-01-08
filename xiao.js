@@ -15,7 +15,6 @@ var minimatch = require('minimatch');
 var AcdFs = require("./AcdFs");
 var GoogleFs = require("./GoogleFs");
 var FsFs = require("./FsFs");
-var Join = require("./Join");
 
 var Joiner = function(count) {
 	this.count = count;
