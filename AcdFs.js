@@ -20,7 +20,7 @@ var AcdHandle = function(node) {
 AcdFs.prototype._listFiles = function(handle, startToken, files, cb) {
 	var self = this;
 	var list_children_options = { };
-	if(startToken) list_children_options.startToken = startToken;
+	if(startToken) { list_children_options.startToken = startToken; list_children_options.limit = 1000 }
 	self.session.list_children(handle.node.id, list_children_options, function(err, items) {
 		if(err) return cb(err);
 		items.data.forEach(function(child, index) {
@@ -31,8 +31,8 @@ AcdFs.prototype._listFiles = function(handle, startToken, files, cb) {
 			}*/
 			files.push( { name: child.name, handle: new AcdHandle(child) } );
 		});
-		if(items.nextToken) {
-			return self.listFiles(startToken, files, cb);
+		if(items.nextTokeni && items.length > 0) {
+			return self._listFiles(handle, items.nextToken, files, cb);
 		} else cb(null, files);
 
 	});
