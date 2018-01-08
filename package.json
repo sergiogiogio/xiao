@@ -1,6 +1,6 @@
 {
   "name": "@sergiogiogio/xiao",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "dependencies": {
     "@request/multipart": "^0.1.1",
     "async": "*",
@@ -11,7 +11,16 @@
   },
   "description": "a cross protocol input and output",
   "main": "xiao.js",
-  "files": ["xiao.js", "GoogleFs.js", "GoogleDriveApi.js", "AcdFs.js", "AcdApi.js", "FsFs.js", "test2.sh", "test.sh"],
+  "files": [
+    "xiao.js",
+    "GoogleFs.js",
+    "GoogleDriveApi.js",
+    "AcdFs.js",
+    "AcdApi.js",
+    "FsFs.js",
+    "test2.sh",
+    "test.sh"
+  ],
   "directories": {
     "example": "examples"
   },
