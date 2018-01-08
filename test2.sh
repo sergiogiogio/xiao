@@ -149,8 +149,10 @@ function runtestgroup {
 	echo "=================== $test ==================="
 	echo "============================================="
 	runtest $test "node xiao.js" . . 
-	runtest $test "node xiao.js" . acd:/ 
-	runtest $test "node xiao.js" acd:/ .
+	#runtest $test "node xiao.js" . acd:/ 
+	#runtest $test "node xiao.js" acd:/ .
+	runtest $test "node xiao.js" . gd:/ 
+	runtest $test "node xiao.js" gd:/ .
 }
 
 runtestgroup test1

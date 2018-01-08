@@ -15,7 +15,7 @@ var FsHandle = function(parent, name) {
 	this.name = name;
 }
 FsHandle.prototype.path = function() {
-	return Buffer.concat([ this.parent.path(), Buffer.from(path.sep), this.name ]);
+	return Buffer.concat([ this.parent.path(), Buffer.from(path.sep), Buffer.from(this.name) ]);
 }
 
 
