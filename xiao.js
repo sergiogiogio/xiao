@@ -34,7 +34,7 @@ Joiner.prototype.fun = function(err) {
 
 //var queue = async.queue(function(fun, cb) { var cbCalled = false; var qcb = function(err) { if(!CbCalled) { cbCalled = true; return cb(err); } } fun(qcb, qcb); }, 1);
 var sQueueJobId = 0;
-var queue = async.queue(function(fun, cb) { var jobId=sQueueJobId++; var qcb=function(err) { debug_dev("queue callback %d %s", jobId, err); cb(err) }; qcb.jobId = jobId; fun(qcb); }, 5);
+var queue = async.queue(function(fun, cb) { var jobId=sQueueJobId++; var qcb=function(err, result) { debug_dev("queue callback %d %s", jobId, err); cb(err, result) }; qcb.jobId = jobId; fun(qcb); }, 1);
 var qcbJobId = function(qcb) {
 	if(qcb === undefined) return 0;
 	return qcb.jobId;
@@ -509,8 +509,8 @@ var existsAndIsDirectory = function(fs, handle, name, cb) {
 var rsyncFile = function(options, srcFs, srcHandle, name, dstFs, dstHandle, dstName, cb, qcb) {
 	debug("rsyncFile %j %j %s %j %s %d", options, srcHandle, name, dstHandle, dstName, qcbJobId(qcb));
 	async.parallel({
-		srcIsDirectory: srcFs.isDirectory.bind(null, srcHandle),
-		dstExistsIsDirectory: existsAndIsDirectory.bind(null, dstFs, dstHandle, dstName)
+		srcIsDirectory: queue.push.bind(null, srcFs.isDirectory.bind(null, srcHandle) ),
+		dstExistsIsDirectory: queue.push.bind(null, existsAndIsDirectory.bind(null, dstFs, dstHandle, dstName) )
 	}, function(err, results) { 
 		if(err) { if(qcb) qcb(null); return cb(err); }
 		if(!results.dstExistsIsDirectory.exists) {
@@ -852,7 +852,7 @@ switch(command) {
 			if(err) return cb(err);
 			results = [].concat.apply([], results); // flatten results (array of array -> array)
 			var dest = results.pop();
-			rsyncFiles(options, results, dest.fs, dest.file.handle, dest.name, cb);
+			queue.push( rsyncFiles.bind(null, options, results, dest.fs, dest.file.handle, dest.name, cb) );
 		})
 	break;
 	default: 
@@ -866,6 +866,7 @@ switch(command) {
 
 })(function(err) {
 	console.log("result: %s", err || "SUCCESS");
+	if(err) process.exit(1);
 	process.exitCode = (err ? 1 : 0);
 })
 

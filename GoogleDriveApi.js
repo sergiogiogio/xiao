@@ -297,7 +297,7 @@ Session.prototype.resolve_path = function(node_path, options, cb) {
 			self.request(null,
 				function(opt) {
 					opt.host = url.parse(rootUrl).host;
-					opt.path = url.parse(rootUrl).pathname + "files?q=" + encodeURIComponent("'"+result.files[0].id+"' in parents and name='" + parse.base + "'") + (qOptions ? "&" + serialize(qOptions) : "");
+					opt.path = url.parse(rootUrl).pathname + "files?q=" + encodeURIComponent("'"+result.files[0].id+"' in parents and name='" + parse.base.replace(/'/g, "\\'") + "'") + (qOptions ? "&" + serialize(qOptions) : "");
 					opt.method = "GET"
 				}, function(req) {
 					req.end();
@@ -438,6 +438,7 @@ Session.prototype.create_folder = function(metadata, options, cb) {
 	var fname = "create_folder";
 	debug(fname + "(%j)", metadata);
 	var self = this;
+	metadata.name = metadata.name.replace(/'/g, "\\'");
 	metadata.mimeType = "application/vnd.google-apps.folder";
 	
 	self.upload(metadata, null, null, options, cb);
